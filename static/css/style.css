@@ -1,0 +1,522 @@
+/* ========================================================================
+   Sign Language to Text Converter - CSS Stylesheet
+   ========================================================================
+   WHY CSS?
+   - Separates styling from HTML (clean code)
+   - Reusable styles across multiple pages
+   - Easy to maintain and update design
+   
+   CSS CONCEPTS USED:
+   - Flexbox: Layout system (arranges elements horizontally/vertically)
+   - CSS Grid: Layout system (arranges elements in rows/columns)
+   - Media Queries: Responsive design (looks good on all screen sizes)
+   ======================================================================== */
+
+/* ========================================================================
+   1. ROOT & GLOBAL STYLES
+   ======================================================================== */
+
+:root {
+    /* Color palette */
+    --primary-color: #2196F3;      /* Blue - main color */
+    --success-color: #4CAF50;      /* Green - success state */
+    --danger-color: #F44336;       /* Red - danger/stop */
+    --warning-color: #FF9800;      /* Orange - warning */
+    --dark-bg: #1a1a1a;            /* Dark background */
+    --light-bg: #f5f5f5;           /* Light background */
+    --text-dark: #333;             /* Dark text */
+    --text-light: #666;            /* Light gray text */
+    --border-color: #ddd;          /* Border color */
+    
+    /* Spacing */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    
+    /* Font sizes */
+    --font-size-small: 0.875rem;
+    --font-size-normal: 1rem;
+    --font-size-large: 1.25rem;
+}
+
+/* Universal styles - apply to all elements */
+* {
+    margin: 0;      /* Remove default margins */
+    padding: 0;     /* Remove default padding */
+    box-sizing: border-box;  /* Include padding/border in element size */
+}
+
+/* Body: Main page background and font */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;  /* Clean modern font */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  /* Gradient background */
+    color: var(--text-dark);
+    line-height: 1.6;  /* Space between lines for readability */
+    min-height: 100vh;  /* Full screen height */
+}
+
+/* ========================================================================
+   2. CONTAINER & LAYOUT
+   ======================================================================== */
+
+.container {
+    max-width: 1400px;         /* Maximum width for large screens */
+    margin: 0 auto;             /* Center on page */
+    padding: var(--spacing-md);
+    display: flex;              /* Use flexbox for layout */
+    flex-direction: column;      /* Stack items vertically */
+    min-height: 100vh;
+    gap: var(--spacing-lg);
+}
+
+/* ========================================================================
+   3. HEADER SECTION
+   ======================================================================== */
+
+header {
+    background: rgba(255, 255, 255, 0.95);
+    padding: var(--spacing-lg);
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    margin-bottom: var(--spacing-md);
+}
+
+header h1 {
+    color: var(--primary-color);
+    font-size: 2.5rem;
+    margin-bottom: var(--spacing-xs);
+    font-weight: 700;
+}
+
+.subtitle {
+    color: var(--text-light);
+    font-size: var(--font-size-large);
+    font-weight: 300;
+}
+
+/* ========================================================================
+   4. MAIN CONTENT LAYOUT (Video + Dashboard)
+   ======================================================================== */
+
+main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;  /* Two equal columns */
+    gap: var(--spacing-lg);
+    flex: 1;
+}
+
+/* Video section (left) */
+.video-section {
+    background: white;
+    padding: var(--spacing-lg);
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.video-section h2 {
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-md);
+    font-size: 1.5rem;
+}
+
+/* Dashboard section (right) */
+.dashboard-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* ========================================================================
+   5. VIDEO DISPLAY
+   ======================================================================== */
+
+.video-container {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: var(--spacing-md);
+    aspect-ratio: 4/3;  /* Maintain 4:3 aspect ratio */
+}
+
+.video-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;  /* Fill container while maintaining aspect */
+}
+
+.video-status {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: 5px;
+    font-size: var(--font-size-small);
+}
+
+/* ========================================================================
+   6. BUTTONS & CONTROLS
+   ======================================================================== */
+
+.button-group {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+/* Base button styles */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 5px;
+    font-size: var(--font-size-normal);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Success button (green - for start) */
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+/* Danger button (red - for stop) */
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #da190b;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+/* Warning button (orange - for clear) */
+.btn-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #e68900;
+    transform: translateY(-2px);
+}
+
+/* Small buttons */
+.btn-small {
+    padding: 8px 16px;
+    font-size: var(--font-size-small);
+    flex: none;
+}
+
+/* Disabled state */
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ========================================================================
+   7. GESTURE DISPLAY BOXES
+   ======================================================================== */
+
+.current-gesture {
+    background: #f9f9f9;
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    border-left: 5px solid var(--primary-color);
+}
+
+.current-gesture h3 {
+    color: var(--text-dark);
+    margin-bottom: var(--spacing-sm);
+    font-size: 1.1rem;
+}
+
+.gesture-box {
+    background: white;
+    padding: var(--spacing-md);
+    border-radius: 5px;
+    text-align: center;
+}
+
+.gesture-text {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-xs);
+}
+
+.confidence-text {
+    font-size: var(--font-size-small);
+    color: var(--text-light);
+}
+
+/* ISL Signs Reference Section */
+.signs-reference {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    color: white;
+    margin-top: var(--spacing-md);
+}
+
+.signs-reference h3 {
+    color: white;
+    margin-bottom: var(--spacing-sm);
+    font-size: 1rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.reference-text {
+    font-size: var(--font-size-small);
+    line-height: 1.8;
+    background: rgba(255, 255, 255, 0.1);
+    padding: var(--spacing-sm);
+    border-radius: 5px;
+    margin: 0;
+}
+
+.reference-text strong {
+    color: #ffeb3b;
+    font-weight: 700;
+}
+
+/* ========================================================================
+   8. DASHBOARD PANEL
+   ======================================================================== */
+
+.dashboard-panel {
+    background: white;
+    padding: var(--spacing-lg);
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-panel h2 {
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-md);
+    font-size: 1.5rem;
+}
+
+/* Statistics grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md);
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    text-align: center;
+    color: white;
+}
+
+.stat-label {
+    font-size: var(--font-size-small);
+    opacity: 0.9;
+    margin-bottom: var(--spacing-xs);
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+/* ========================================================================
+   9. PREDICTIONS PANEL
+   ======================================================================== */
+
+.predictions-panel {
+    background: white;
+    padding: var(--spacing-lg);
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.panel-header h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+/* Predictions list */
+.predictions-list {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.prediction-item {
+    background: #f9f9f9;
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.prediction-gesture {
+    font-weight: 700;
+    color: var(--primary-color);
+    font-size: var(--font-size-large);
+}
+
+.prediction-time {
+    font-size: var(--font-size-small);
+    color: var(--text-light);
+}
+
+.empty-message {
+    text-align: center;
+    color: var(--text-light);
+    padding: var(--spacing-lg);
+    font-style: italic;
+}
+
+/* ========================================================================
+   10. FOOTER
+   ======================================================================== */
+
+footer {
+    background: rgba(255, 255, 255, 0.95);
+    padding: var(--spacing-lg);
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+footer p {
+    margin: var(--spacing-xs) 0;
+    color: var(--text-dark);
+}
+
+.tech-info {
+    font-size: var(--font-size-small);
+    color: var(--text-light);
+}
+
+/* ========================================================================
+   11. RESPONSIVE DESIGN (Mobile, Tablet)
+   ======================================================================== */
+
+/* Tablets and smaller desktops */
+@media (max-width: 1024px) {
+    main {
+        grid-template-columns: 1fr;  /* Single column on smaller screens */
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    header h1 {
+        font-size: 2rem;
+    }
+}
+
+/* Mobile phones */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-sm);
+    }
+    
+    header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1rem;
+    }
+    
+    .video-section,
+    .dashboard-panel,
+    .predictions-panel {
+        padding: var(--spacing-md);
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .prediction-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+}
+
+/* ========================================================================
+   12. UTILITY CLASSES
+   ======================================================================== */
+
+/* Remove scrollbar but keep scrolling functionality */
+.predictions-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.predictions-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.predictions-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.predictions-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}

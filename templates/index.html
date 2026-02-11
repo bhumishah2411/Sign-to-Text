@@ -1,0 +1,156 @@
+<!-- 
+    ========================================================================
+    Sign Language to Text Converter - Main HTML Page
+    ========================================================================
+    HOW HTML WORKS:
+    - HTML provides the structure (like building blueprint)
+    - CSS provides styling (like interior design)
+    - JavaScript provides interactivity (like electricity/automation)
+    
+    THIS PAGE:
+    - Shows webcam video stream from backend
+    - Has buttons to control camera
+    - Displays detected gestures
+    - Shows database of all recognized signs
+    - Updates in real-time via JavaScript
+    ======================================================================== 
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Meta information -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language to Text Converter</title>
+    
+    <!-- Link to CSS stylesheet for styling -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Main container for all content -->
+    <div class="container">
+        
+        <!-- Header section with title -->
+        <header>
+            <h1>🤟 Indian Sign Language (ISL) to Text Converter</h1>
+            <p class="subtitle">Real-time Indian Sign Language gesture recognition using Machine Learning</p>
+        </header>
+        
+        <!-- Main content area -->
+        <main>
+            
+            <!-- Left section: Video stream and controls -->
+            <div class="video-section">
+                <h2>Live Video Stream</h2>
+                
+                <!-- Video display area
+                     - Shows live camera feed from /video_feed endpoint
+                     - MJPEG format (sequence of JPEG frames)
+                -->
+                <div class="video-container">
+                    <img id="videoFeed" 
+                         src="{{ url_for('static', filename='placeholder.svg') }}" 
+                         alt="Video Feed"
+                         class="video-stream">
+                    <p class="video-status" id="videoStatus">Waiting to start camera...</p>
+                </div>
+                
+                <!-- Control buttons
+                     - Start Camera: Opens webcam and begins streaming
+                     - Stop Camera: Closes webcam and stops streaming
+                     - These buttons call JavaScript functions
+                -->
+                <div class="button-group">
+                    <button id="startBtn" class="btn btn-success" onclick="startCamera()">
+                        ▶ Start Camera
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" onclick="stopCamera()" disabled>
+                        ⏹ Stop Camera
+                    </button>
+                </div>
+                
+                <!-- ISL Signs Reference -->
+                <div class="signs-reference">
+                    <h3>Indian Sign Language (ISL) Signs</h3>
+                    <p class="reference-text">
+                        <strong>YES</strong>: Closed fist | <strong>NO</strong>: Pinched fingers<br>
+                        <strong>GOOD</strong>: Thumbs up | <strong>BAD</strong>: Thumbs down<br>
+                        <strong>OK</strong>: Circle with thumb & index | <strong>HELLO</strong>: Open palm raised<br>
+                        <strong>STOP</strong>: Vertical blocking hand | <strong>HELP</strong>: Thumbs up on palm<br>
+                        <strong>THANK YOU</strong>: Flat hand near chin | <strong>PLEASE</strong>: Flat hand on chest
+                    </p>
+                </div>
+                
+                <!-- Current detection display
+                     - Shows what gesture is currently being detected
+                     - Updates in real-time
+                -->
+                <div class="current-gesture">
+                    <h3>Current Detection</h3>
+                    <div class="gesture-box">
+                        <p id="currentGesture" class="gesture-text">No gesture detected</p>
+                        <p id="confidenceLevel" class="confidence-text">Confidence: --</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right section: Dashboard and history -->
+            <div class="dashboard-section">
+                
+                <!-- Dashboard panel showing statistics -->
+                <div class="dashboard-panel">
+                    <h2>📊 Dashboard</h2>
+                    <div class="stats-grid">
+                        <!-- Total predictions statistic -->
+                        <div class="stat-card">
+                            <p class="stat-label">Total Predictions</p>
+                            <p class="stat-value" id="totalPredictions">0</p>
+                        </div>
+                        <!-- Unique gestures statistic -->
+                        <div class="stat-card">
+                            <p class="stat-label">Unique Gestures</p>
+                            <p class="stat-value" id="uniqueGestures">0</p>
+                        </div>
+                        <!-- Most detected gesture -->
+                        <div class="stat-card">
+                            <p class="stat-label">Most Detected</p>
+                            <p class="stat-value" id="mostDetected">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Detected signs list
+                     - Shows last 10 detected gestures
+                     - Ordered from newest to oldest
+                     - Updates as new gestures are detected
+                -->
+                <div class="predictions-panel">
+                    <div class="panel-header">
+                        <h2>🎯 Detected Signs</h2>
+                        <button id="clearBtn" class="btn btn-small btn-warning" onclick="clearData()">
+                            🗑 Clear History
+                        </button>
+                    </div>
+                    
+                    <!-- List of detected predictions -->
+                    <div id="predictionsList" class="predictions-list">
+                        <p class="empty-message">No predictions yet. Start camera to detect signs!</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Footer with information -->
+        <footer>
+            <p>Sign Language to Text Converter | Built with Flask, OpenCV & MediaPipe</p>
+            <p class="tech-info">
+                Python Backend • HTML/CSS/JS Frontend • SQLite Database
+            </p>
+        </footer>
+    </div>
+    
+    <!-- Link to JavaScript file for interactivity -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
