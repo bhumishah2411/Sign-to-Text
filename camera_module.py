@@ -15,6 +15,9 @@ import mediapipe as mp
 import base64
 import io
 import numpy as np
+import threading
+import time
+from collections import deque
 from gesture_model import GestureRecognizer
 from config import WEBCAM_WIDTH, WEBCAM_HEIGHT, WEBCAM_FPS
 
@@ -40,8 +43,24 @@ class CameraManager:
         self.is_running = False
         self.index = None
         self.startup_time = None
-        import time
         self.time_module = time
+        
+        # Performance optimization: Frame buffering and caching
+        self.latest_frame = None
+        self.latest_gesture = None
+        self.latest_detection_results = None  # Cache full detection results (landmarks + gesture)
+        self.frame_lock = threading.Lock()
+        self.capture_thread = None
+        self.processing_thread = None
+        
+        # Frame rate control
+        self.target_fps = 30
+        self.last_frame_time = 0
+        self.frame_interval = 1.0 / self.target_fps
+        
+        # Processing queue for async gesture detection
+        self.frame_queue = deque(maxlen=2)  # Keep only latest 2 frames
+        self.processing_enabled = True
     
     # ======================== CAMERA INITIALIZATION =============================
     
@@ -146,9 +165,18 @@ class CameraManager:
 
                     # Success! Camera is ready
                     self.is_running = True
-                    import time as time_module
-                    self.startup_time = time_module.time()
+                    self.startup_time = time.time()
+                    
+                    # Start background frame capture thread for better performance
+                    self.capture_thread = threading.Thread(target=self._frame_capture_loop, daemon=True)
+                    self.capture_thread.start()
+                    
+                    # Start background processing thread
+                    self.processing_thread = threading.Thread(target=self._frame_processing_loop, daemon=True)
+                    self.processing_thread.start()
+                    
                     print(f"[CAMERA] ✅ Camera started successfully at index {idx}! (Warmup: {warmup_success_count}/{warmup_attempts} frames)")
+                    print("[CAMERA] Background frame capture and processing threads started")
                     return True
 
                 except Exception as e:
@@ -177,19 +205,82 @@ class CameraManager:
             traceback.print_exc()
             return False
     
+    # ======================== BACKGROUND FRAME CAPTURE (PERFORMANCE OPTIMIZATION) =============================
+    
+    def _frame_capture_loop(self):
+        """
+        Background thread that continuously captures frames from camera.
+        This prevents blocking and ensures smooth frame rate.
+        """
+        while self.is_running:
+            try:
+                if not self.camera or not self.camera.isOpened():
+                    time.sleep(0.1)
+                    continue
+                
+                # Read frame from camera (fast operation)
+                ret, frame = self.camera.read()
+                
+                if ret and frame is not None:
+                    # Flip frame horizontally (mirror effect)
+                    frame = cv2.flip(frame, 1)
+                    
+                    # Update latest frame atomically
+                    with self.frame_lock:
+                        self.latest_frame = frame.copy()
+                        # Add to processing queue if processing is enabled
+                        if self.processing_enabled:
+                            self.frame_queue.append(frame.copy())
+                else:
+                    time.sleep(0.01)  # Small delay if frame read fails
+                    
+            except Exception as e:
+                print(f"[CAMERA ERROR] Error in capture loop: {e}")
+                time.sleep(0.1)
+    
+    def _frame_processing_loop(self):
+        """
+        Background thread that processes frames for gesture detection.
+        Separates heavy MediaPipe processing from frame capture.
+        """
+        while self.is_running:
+            try:
+                # Process frames from queue
+                if self.frame_queue:
+                    frame = self.frame_queue.popleft()
+                    
+                    # Process frame for gesture detection (heavy operation)
+                    detection_results = gesture_recognizer.process_frame(frame)
+                    
+                    detected_gesture = None
+                    if detection_results['hand_landmarks']:
+                        detected_gesture = detection_results['gestures'][0] if detection_results['gestures'] else None
+                    
+                    # Update latest gesture and detection results atomically (for drawing)
+                    with self.frame_lock:
+                        self.latest_gesture = detected_gesture
+                        self.latest_detection_results = detection_results
+                else:
+                    time.sleep(0.05)  # Small delay if queue is empty
+                    
+            except Exception as e:
+                print(f"[CAMERA ERROR] Error in processing loop: {e}")
+                time.sleep(0.1)
+    
     # ======================== FRAME CAPTURE AND PROCESSING =============================
     
-    def get_frame_with_gesture(self):
+    def get_frame_with_gesture(self, draw_landmarks=True):
         """
-        Capture frame from camera and process for gesture detection.
+        Get latest frame and gesture from cache (optimized - no blocking).
+        Uses background threads for capture and processing.
         
-        STEPS:
-        1. Read frame from camera
-        2. Mirror it (so it looks like user is looking at mirror)
-        3. Detect hand gestures
-        4. Draw hand skeleton on frame
-        5. Add text showing detected gesture
-        6. Return processed frame
+        OPTIMIZATION:
+        - Returns cached frame/gesture from background threads
+        - No blocking MediaPipe processing here
+        - Draws landmarks/text on demand for display
+        
+        PARAMETER:
+        - draw_landmarks: Whether to draw hand landmarks (default True for video feed)
         
         RETURNS: Tuple (frame, detected_gesture) or (None, None) if error
         """
@@ -197,82 +288,66 @@ class CameraManager:
             return None, None
         
         try:
-            # Read frame from camera
-            ret, frame = self.camera.read()
+            # Get latest frame, gesture, and detection results from cache (fast, non-blocking)
+            with self.frame_lock:
+                if self.latest_frame is None:
+                    return None, None
+                
+                frame = self.latest_frame.copy()
+                detected_gesture = self.latest_gesture
+                detection_results = self.latest_detection_results  # Use cached results
             
-            if not ret:
-                # Check if camera is still open
-                if self.camera:
-                    is_open = self.camera.isOpened()
-                    print(f"[CAMERA] Frame read failed: ret={ret}, isOpened={is_open}, index={self.index}")
-                    if not is_open:
-                        print("[CAMERA] Camera closed unexpectedly; resetting is_running flag")
-                        self.is_running = False
-                else:
-                    print("[CAMERA] Frame read failed: camera object is None")
-                return None, None
-            
-            # Flip frame horizontally (mirror effect - more intuitive for user)
-            frame = cv2.flip(frame, 1)
-            
-            # Process frame to detect gestures
-            # This calls our gesture_model.py to analyze hand landmarks
-            detection_results = gesture_recognizer.process_frame(frame)
-            
-            detected_gesture = None
-            
-            # Draw hand skeleton and landmarks only if hands detected (reduces drawing overhead)
-            if detection_results['hand_landmarks']:
-                for hand_landmarks in detection_results['hand_landmarks']:
-                    mp_drawing.draw_landmarks(
+            # Only draw landmarks/text if requested (for video feed)
+            # Skip drawing for detection API calls to save time
+            if draw_landmarks and detection_results:
+                # Draw hand skeleton and landmarks only if hands detected (using cached results)
+                if detection_results.get('hand_landmarks'):
+                    for hand_landmarks in detection_results['hand_landmarks']:
+                        mp_drawing.draw_landmarks(
+                            frame,
+                            hand_landmarks,
+                            mp_hands.HAND_CONNECTIONS,
+                            mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2),
+                            mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
+                        )
+                
+                # Display gesture on frame if detected
+                if detected_gesture:
+                    cv2.putText(
                         frame,
-                        hand_landmarks,
-                        mp_hands.HAND_CONNECTIONS,
-                        mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2),
-                        mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
+                        f"ISL: {detected_gesture}",
+                        (20, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.2,
+                        (0, 255, 0),
+                        2
                     )
-                # Get detected gesture (if any)
-                detected_gesture = detection_results['gestures'][0] if detection_results['gestures'] else None
-            
-            # Display gesture on frame if detected
-            if detected_gesture:
-                # Put green text on frame showing the detected gesture
+                else:
+                    cv2.putText(
+                        frame,
+                        "No ISL gesture detected",
+                        (20, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (0, 0, 255),
+                        2
+                    )
+                
+                # Add instruction text
                 cv2.putText(
                     frame,
-                    f"ISL: {detected_gesture}",
-                    (20, 50),
+                    "Make hand gestures in front of camera",
+                    (20, frame.shape[0] - 20),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    1.2,
-                    (0, 255, 0),  # Green color for positive detection
-                    2
+                    0.6,
+                    (255, 255, 255),
+                    1
                 )
-            else:
-                # Put red text if no gesture detected
-                cv2.putText(
-                    frame,
-                    "No ISL gesture detected",
-                    (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (0, 0, 255),  # Red color for no detection
-                    2
-                )
-            
-            # Add instruction text
-            cv2.putText(
-                frame,
-                "Make hand gestures in front of camera",
-                (20, frame.shape[0] - 20),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),  # White instruction text
-                1
-            )
             
             return frame, detected_gesture
             
         except Exception as e:
-            print(f"[CAMERA ERROR] Error processing frame: {e}")
+            print(f"[CAMERA ERROR] Error getting frame: {e}")
             return None, None
     
     # ======================== FRAME TO BASE64 CONVERSION =============================
@@ -346,21 +421,12 @@ class CameraManager:
     
     def get_frame_stream(self):
         """
-        Generator function for continuous video streaming.
+        Generator function for continuous video streaming (OPTIMIZED).
         
-        WHAT IS A GENERATOR?
-        - A function that yields values one at a time
-        - Useful for streaming (continuous data)
-        - Used by Flask to send video stream to browser
-        
-        PROCESS:
-        1. Continuously capture frames
-        2. Process each frame for gesture detection
-        3. Convert to JPEG bytes
-        4. Yield frame data in MJPEG format
-        
-        MJPEG = Motion JPEG (sequence of JPEG images)
-        This is how browser displays video
+        OPTIMIZATIONS:
+        - Uses cached frames from background thread (no blocking)
+        - FPS control to prevent overwhelming browser
+        - Lower JPEG quality for faster encoding
         
         YIELDS: MJPEG-formatted frame data
         """
@@ -368,21 +434,30 @@ class CameraManager:
         
         while self.is_running:
             try:
-                frame, gesture = self.get_frame_with_gesture()
+                # FPS control: ensure we don't exceed target frame rate
+                current_time = time.time()
+                elapsed = current_time - self.last_frame_time
+                
+                if elapsed < self.frame_interval:
+                    time.sleep(self.frame_interval - elapsed)
+                
+                self.last_frame_time = time.time()
+                
+                # Get frame with drawings (for video feed)
+                frame, gesture = self.get_frame_with_gesture(draw_landmarks=True)
                 
                 if frame is None:
-                    # Skip frames that failed to capture
                     frame_skip_count += 1
-                    if frame_skip_count > 30:  # Log after 30 skipped frames
+                    if frame_skip_count > 30:
                         print("[CAMERA] Warning: No frames captured for 30 cycles")
                         frame_skip_count = 0
+                    time.sleep(0.033)  # ~30 FPS fallback
                     continue
                 
-                frame_skip_count = 0  # Reset skip counter on successful frame
+                frame_skip_count = 0
                 
-                # Encode frame as JPEG bytes directly (not base64)
-                # Use lower quality (70) to reduce file size and improve speed
-                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                # Encode frame as JPEG bytes (optimized quality for speed)
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 frame_bytes = buffer.tobytes()
                 
                 # Yield in proper MJPEG format
@@ -393,6 +468,7 @@ class CameraManager:
                        
             except Exception as e:
                 print(f"[CAMERA ERROR] Error in frame stream: {e}")
+                time.sleep(0.1)
                 continue
     
     # ======================== CAMERA CLEANUP =============================
@@ -405,20 +481,37 @@ class CameraManager:
         If you don't, the camera stays locked and you can't use it again
         until you restart Python.
         """
+        # Stop background threads first
+        self.is_running = False
+        
+        # Wait for threads to finish (with timeout)
+        if self.capture_thread and self.capture_thread.is_alive():
+            self.capture_thread.join(timeout=1.0)
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.processing_thread.join(timeout=1.0)
+        
         if self.camera:
             elapsed = None
             if self.startup_time:
-                import time as time_module
-                elapsed = time_module.time() - self.startup_time
+                elapsed = time.time() - self.startup_time
                 print(f"[CAMERA] Camera was running for {elapsed:.2f} seconds")
-            self.is_running = False
+            
             try:
                 self.camera.release()
                 print(f"[CAMERA] Camera released successfully at index {self.index}")
             except Exception as e:
                 print(f"[CAMERA] Error releasing camera: {e}")
+            
             self.index = None
             self.startup_time = None
+            
+            # Clear frame cache
+            with self.frame_lock:
+                self.latest_frame = None
+                self.latest_gesture = None
+                self.latest_detection_results = None
+                self.frame_queue.clear()
+            
             print("[CAMERA] Camera stopped and resources released!")
     
     # ======================== STATUS CHECK =============================

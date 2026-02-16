@@ -11,10 +11,12 @@
 
 from flask import Flask, render_template, Response, jsonify, request
 from datetime import datetime
+from collections import deque
 import os
 import cv2
 import base64
 import atexit
+import time
 
 # Import our custom modules
 from config import DEBUG, SECRET_KEY, GESTURE_LIST
@@ -43,10 +45,28 @@ gesture_recognizer = GestureRecognizer()
 # Flag to track if camera is running
 camera_active = False
 
-# Store last detected gesture to avoid duplicate entries
+# Store last detected gesture to avoid duplicate entries (per-frame raw detection)
 last_detected_gesture = None
 frame_counter = 0
-detection_threshold = 2  # Very fast confirmation (just 2 frames)
+detection_threshold = 2  # Legacy quick confirmation (kept for logging, not main logic)
+
+# ======================== STABLE GESTURE DETECTION CONFIG =====================
+
+# We will combine:
+# - Majority voting over recent frames (stabilization buffer)
+# - Time threshold (gesture must be stable for some seconds)
+# - State change detection (NO_GESTURE -> GESTURE) to avoid repeats
+
+DETECTION_BUFFER_SIZE = 10          # ~2 seconds if /api/detect_gesture is called every 200ms
+MIN_SIGN_STABLE_SECONDS = 1.5       # How long a gesture must be stable before registering
+MIN_NO_GESTURE_SECONDS = 0.5        # How long "no gesture" must be stable to reset state
+BUFFER_MIN_CONFIDENCE = 0.6         # Minimum majority ratio to consider buffer stable
+
+# None is treated as "no gesture" in our logic
+detection_buffer = deque(maxlen=DETECTION_BUFFER_SIZE)
+stable_gesture_state = None         # Current stable gesture (or None for no gesture)
+last_registered_gesture = None      # Last gesture actually saved to DB
+state_start_time = None             # When the current stable_gesture_state started
 
 
 # ======================== DATABASE AND APP STARTUP =============================
@@ -302,6 +322,7 @@ def detect_gesture_route():
     RETURNS: JSON with detected gesture and metadata
     """
     global last_detected_gesture, frame_counter, frame_skip_count
+    global detection_buffer, stable_gesture_state, last_registered_gesture, state_start_time
     
     try:
         # Check if camera is active - if not, return safe 200 response
@@ -314,8 +335,8 @@ def detect_gesture_route():
                 'timestamp': datetime.now().isoformat()
             }), 200
 
-        # Get current frame from server-side camera
-        frame, detected_gesture = camera_manager.get_frame_with_gesture()
+        # Get current frame from server-side camera (optimized - no drawing for detection API)
+        frame, detected_gesture = camera_manager.get_frame_with_gesture(draw_landmarks=False)
 
         # If frame is None (camera not ready), return safe 200 response
         if frame is None:
@@ -327,20 +348,72 @@ def detect_gesture_route():
                 'timestamp': datetime.now().isoformat()
             }), 200
         
-        # Confidence system: need multiple consecutive frames with same gesture
+        # ---------------------------------------------------------------------
+        # 1. Per-frame tracking (legacy counter - still useful for debugging)
+        # ---------------------------------------------------------------------
         if detected_gesture == last_detected_gesture:
             frame_counter += 1
         else:
             frame_counter = 1
             last_detected_gesture = detected_gesture
-        
-        # Only save if we're confident (threshold reached) - now 3 instead of 5
+
+        # ---------------------------------------------------------------------
+        # 2. Stabilization buffer (majority voting over recent frames)
+        # ---------------------------------------------------------------------
+        detection_buffer.append(detected_gesture)
+
+        stable_candidate = None
+        buffer_confidence = 0.0
+
+        if detection_buffer:
+            counts = {}
+            for g in detection_buffer:
+                counts[g] = counts.get(g, 0) + 1
+
+            # Gesture with highest count in buffer
+            stable_candidate = max(counts, key=counts.get)
+            buffer_confidence = counts[stable_candidate] / len(detection_buffer)
+
+            # Require a minimum confidence; otherwise treat as "no stable gesture"
+            if buffer_confidence < BUFFER_MIN_CONFIDENCE:
+                stable_candidate = None
+
+        # ---------------------------------------------------------------------
+        # 3. State machine for stable gesture vs "no gesture"
+        # ---------------------------------------------------------------------
+        now_ts = time.time()
+
+        # If stable candidate changed, start timing this new state
+        if stable_candidate != stable_gesture_state:
+            stable_gesture_state = stable_candidate
+            state_start_time = now_ts
+
+        time_in_state = 0.0
+        if state_start_time is not None:
+            time_in_state = now_ts - state_start_time
+
+        # ---------------------------------------------------------------------
+        # 4. Registration logic (NO_GESTURE -> STABLE_GESTURE transitions only)
+        # ---------------------------------------------------------------------
         saved = False
-        if detected_gesture and frame_counter >= detection_threshold:
-            if save_prediction(detected_gesture, confidence=0.9):
-                saved = True
-                frame_counter = 0  # Reset counter
-        
+
+        if stable_gesture_state is None:
+            # In a "no gesture" state; once stable long enough, allow next sign
+            if time_in_state >= MIN_NO_GESTURE_SECONDS:
+                last_registered_gesture = None
+        else:
+            # We have a stable gesture (e.g., "HELLO", "PLEASE", etc.)
+            # Register ONLY when:
+            #   - It has been stable for at least MIN_SIGN_STABLE_SECONDS
+            #   - It is different from the last registered gesture
+            if (
+                time_in_state >= MIN_SIGN_STABLE_SECONDS
+                and stable_gesture_state != last_registered_gesture
+            ):
+                if save_prediction(stable_gesture_state, confidence=buffer_confidence):
+                    saved = True
+                    last_registered_gesture = stable_gesture_state
+
         # ALWAYS return 200 - never return error status for normal operation
         return jsonify({
             'status': 'success',
